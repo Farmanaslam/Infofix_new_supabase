@@ -281,7 +281,7 @@ export default function CustomerProfile({
                       First Service
                     </p>
                     <p className="font-bold text-slate-800 text-sm">
-                      {joinDate.split(",")[0]}
+                      {joinDate?.split(",")[0]}
                     </p>
                   </div>
                 </div>
