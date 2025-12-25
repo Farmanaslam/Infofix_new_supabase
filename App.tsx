@@ -293,16 +293,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     { id: "ld2", name: "Local Dealer" },
   ],
   sla: { high: 2, medium: 5, low: 10 },
-  teamMembers: [
-    {
-      id: "1",
-      name: "Admin User",
-      email: "admin@nexus.com",
-      role: "ADMIN",
-      experience: "System Architect",
-      photo: "",
-    },
-  ],
+  teamMembers: [],
   supportGuidelines: [
     {
       id: "g1",
@@ -373,6 +364,31 @@ function App() {
   // --- PERSISTENT STATE ---
   //const [appSettings, setAppSettings] = useSmartSync<AppSettings>('settings', DEFAULT_SETTINGS, handleSyncStatus);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db) return;
+
+    // Fetch users collection
+    const usersCollection = collection(db, "users");
+
+    const unsubscribe = onSnapshot(
+      usersCollection,
+      (snapshot) => {
+        const users: User[] = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<User, "id">),
+        }));
+
+        console.log("Fetched users from Firestore:", users); // <-- Debug
+
+        setAppSettings((prev) => ({ ...prev, teamMembers: users }));
+      },
+      (error) => {
+        console.error("Error fetching users:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   const [customers, setCustomers] = useSmartSync<Customer[]>(
     "customers",
@@ -397,6 +413,7 @@ function App() {
     "nexus_current_user_v1",
     null
   );
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db) return;
@@ -531,7 +548,7 @@ function App() {
             activeTab="dashboard"
             tasks={tasks}
             setTasks={setTasks}
-            teamMembers={appSettings.teamMembers}
+            teamMembers={teamMembers}
             currentUser={currentUser}
             savedReports={laptopReports}
           />

@@ -84,6 +84,9 @@ export default function TaskManager({ activeTab, tasks, setTasks, teamMembers, c
   // --- SUB-VIEWS ---
 
   // 1. DASHBOARD VIEW
+  if (activeTab === 'dashboard' && currentUser.role === 'TECHNICIAN') {
+  return null;
+}
   if (activeTab === 'dashboard') {
     const pieData = [
       { name: 'Completed', value: stats.completed, color: '#10b981' },

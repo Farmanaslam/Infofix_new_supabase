@@ -101,31 +101,56 @@ export default function Login({
     }, 800); // Fake delay for UX feel
   };
 
-  const handleStaffLogin = (e: React.FormEvent) => {
+  const handleStaffLogin =async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+  setError(null);
+  setIsLoading(true);
 
-    const user = teamMembers.find(
-      (m) => m.email.toLowerCase() === staffEmail.toLowerCase()
+  try {
+    // 1️⃣ Firebase Auth login
+    const userCred = await signInWithEmailAndPassword(
+      auth,
+      staffEmail,
+      staffPass
     );
 
-    if (user) {
-      if (staffPass) {
-        if (rememberMe) {
-          localStorage.setItem(
-            "nexus_staff_login",
-            JSON.stringify({ email: staffEmail, pass: staffPass })
-          );
-        } else {
-          localStorage.removeItem("nexus_staff_login");
-        }
-        simulateLoading(() => onLogin(user));
-      } else {
-        setError("Please enter your password.");
-      }
-    } else {
-      setError("Invalid email or password.");
+    // 2️⃣ Fetch staff profile
+    const snap = await getDoc(doc(db, "users", userCred.user.uid));
+
+    if (!snap.exists()) {
+      throw new Error("Staff profile not found");
     }
+
+    const data = snap.data();
+
+    // 3️⃣ Role validation
+    if (data.role !== "TECHNICIAN" && data.role !== "MANAGER" && data.role !== "ADMIN") {
+      throw new Error("Not authorized as staff");
+    }
+
+    // 4️⃣ Remember me
+    if (rememberMe) {
+      localStorage.setItem(
+        "nexus_staff_login",
+        JSON.stringify({ email: staffEmail })
+      );
+    } else {
+      localStorage.removeItem("nexus_staff_login");
+    }
+
+    // 5️⃣ Login success
+    onLogin({
+      id: userCred.user.uid,
+      name: data.name,
+      email: data.email,
+      role: data.role,
+    });
+
+  } catch (err: any) {
+    setError("Invalid email or password");
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   const handleCustomerLogin = async (e: React.FormEvent) => {

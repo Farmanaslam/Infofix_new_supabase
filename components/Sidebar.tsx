@@ -59,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobile
       id: 'dashboard', 
       label: 'Dashboard', 
       icon: LayoutDashboard,
-      allowedRoles: ['ADMIN', 'MANAGER'] 
+      allowedRoles: ['ADMIN', 'MANAGER','TECHNICIAN'] 
     },
     { 
       id: 'tickets', 
@@ -79,9 +79,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobile
       icon: CheckSquare,
       allowedRoles: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
       children: [
-        { id: 'task_dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['ADMIN', 'MANAGER', 'TECHNICIAN'] },
+        { id: 'task_dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['ADMIN', 'MANAGER', ] },
         { id: 'task_my_works', label: 'My Works', icon: Briefcase, allowedRoles: ['ADMIN', 'MANAGER', 'TECHNICIAN'] },
-        { id: 'task_schedule', label: 'Schedule', icon: Calendar, allowedRoles: ['ADMIN', 'MANAGER'] },
+        { id: 'task_schedule', label: 'Schedule', icon: Calendar, allowedRoles: ['ADMIN', 'MANAGER','TECHNICIAN'] },
         { id: 'task_reports', label: 'Reports', icon: FileText, allowedRoles: ['ADMIN', 'MANAGER'] },
         { id: 'task_ratings', label: 'Staff Ratings', icon: Star, allowedRoles: ['ADMIN', 'MANAGER'] }
       ]
@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobile
       icon: ClipboardCheck,
       allowedRoles: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
       children: [
-         { id: 'laptop_dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['ADMIN', 'MANAGER', 'TECHNICIAN'] },
+         { id: 'laptop_dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['ADMIN', 'MANAGER', ] },
          { id: 'laptop_data', label: 'Data Management', icon: Database, allowedRoles: ['ADMIN', 'MANAGER', 'TECHNICIAN'] }
       ]
     },
@@ -232,24 +232,29 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobile
                 {/* Nested Items */}
                 {hasChildren && isOpen && (
                    <div className="mt-1 ml-4 pl-4 border-l border-white/10 space-y-1 animate-in slide-in-from-top-1 duration-200">
-                      {item.children?.map(child => (
-                         <button
-                           key={child.id}
-                           onClick={() => {
-                             setCurrentView(child.id as View);
-                             setIsMobileOpen(false);
-                           }}
-                           className={`
-                             w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors
-                             ${currentView === child.id
-                               ? 'text-white bg-white/10' 
-                               : 'text-slate-500 hover:text-white hover:bg-white/5'}
-                           `}
-                         >
-                           <child.icon size={16} className={currentView === child.id ? 'text-indigo-400' : 'opacity-70'} />
-                           {child.label}
-                         </button>
-                      ))}
+                     {item.children
+  ?.filter(child => child.allowedRoles.includes(currentUser.role))
+  .map(child => (
+    <button
+      key={child.id}
+      onClick={() => {
+        setCurrentView(child.id as View);
+        setIsMobileOpen(false);
+      }}
+      className={`
+        w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors
+        ${currentView === child.id
+          ? 'text-white bg-white/10'
+          : 'text-slate-500 hover:text-white hover:bg-white/5'}
+      `}
+    >
+      <child.icon
+        size={16}
+        className={currentView === child.id ? 'text-indigo-400' : 'opacity-70'}
+      />
+      {child.label}
+    </button>
+))}
                    </div>
                 )}
               </div>

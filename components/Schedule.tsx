@@ -604,7 +604,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
     status: "pending",
   });
 
-  useEffect(() => {
+  {
+    /*useEffect(() => {
     if (taskToEdit) {
       setFormData(taskToEdit);
     } else {
@@ -618,10 +619,48 @@ const TaskModal: React.FC<TaskModalProps> = ({
         status: "pending",
       });
     }
+  }, [taskToEdit, initialDate, currentUser]);*/
+  }
+  useEffect(() => {
+    if (taskToEdit) {
+      setFormData({
+        ...taskToEdit,
+        assignedToId: taskToEdit.assignedToId || "",
+        status: taskToEdit.status || "pending",
+      });
+    } else {
+      setFormData({
+        title: "",
+        date: initialDate,
+        time: "09:00",
+        description: "",
+        type: "general",
+        assignedToId: currentUser.role === "TECHNICIAN" ? currentUser.id : "",
+        status: "pending",
+      });
+    }
   }, [taskToEdit, initialDate, currentUser]);
 
   const canAssign =
     currentUser.role === "ADMIN" || currentUser.role === "MANAGER";
+  const normalizeRole = (role: string) => role.trim().toUpperCase();
+
+  const assignableMembers = teamMembers.filter((member) => {
+    const memberRole = normalizeRole(member.role);
+    const currentRole = normalizeRole(currentUser.role);
+
+    if (currentRole === "ADMIN") return true;
+
+    if (currentRole === "MANAGER") {
+      return (
+        memberRole === "TECHNICIAN" ||
+        member.id === currentUser.id ||
+        (taskToEdit && member.id === taskToEdit.assignedToId)
+      );
+    }
+    // TECHNICIAN: cannot assign
+    return false;
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -794,11 +833,27 @@ const TaskModal: React.FC<TaskModalProps> = ({
                   className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none transition-all"
                 >
                   <option value="">-- Unassigned --</option>
-                  {teamMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.role})
-                    </option>
-                  ))}
+                  {teamMembers
+                    .filter((member) => {
+                      if (currentUser.role === "MANAGER") {
+                        // Manager can assign to technicians or themselves
+                        return (
+                          member.role.toUpperCase() === "TECHNICIAN" ||
+                          member.id === currentUser.id
+                        );
+                      }
+                      if (currentUser.role === "ADMIN") {
+                        // Admin can see all
+                        return true;
+                      }
+                      // Technicians cannot assign
+                      return false;
+                    })
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.role})
+                      </option>
+                    ))}
                 </select>
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
                   <ChevronRight size={16} className="rotate-90" />
