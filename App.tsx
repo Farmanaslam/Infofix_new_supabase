@@ -33,6 +33,7 @@ import { db, isFirebaseConfigured } from "./firebaseConfig";
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -395,6 +396,31 @@ function App() {
     DEFAULT_CUSTOMERS,
     handleSyncStatus
   );
+  const fetchCustomers = async () => {
+  const snapshot = await getDocs(collection(db, "customers"));
+
+  console.log("🔥 TOTAL DOCS:", snapshot.size); // IMPORTANT
+
+  const data: Customer[] = snapshot.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      name: d.name ?? "",
+      email: d.email ?? "",
+      mobile: d.mobile ?? "",
+      address: d.address ?? "",
+    };
+  });
+
+  console.log(" MAPPED CUSTOMERS:", data.length);
+
+  setCustomers(data);
+}
+useEffect(() => {
+  fetchCustomers();
+}, []);
+
+  
   const [tickets, setTickets] = useSmartSync<Ticket[]>(
     "tickets",
     [],

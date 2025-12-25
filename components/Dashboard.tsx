@@ -37,6 +37,10 @@ import {
   Bar,
   Cell
 } from 'recharts';
+import { collection, getDocs } from "firebase/firestore";
+import { db } from '@/firebaseConfig';
+
+
 
 interface DashboardProps {
   tickets: Ticket[];
@@ -54,9 +58,18 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, customers, settings, cur
     const activeTickets = tickets.filter(t => t.status !== 'Resolved' && t.status !== 'Rejected');
     
     // Resolved Today
-    const todayStr = new Date().toLocaleDateString();
-    const resolvedToday = tickets.filter(t => t.status === 'Resolved' && t.date === todayStr).length;
+   const today = new Date();
+today.setHours(0, 0, 0, 0);
 
+const resolvedToday = tickets.filter(t => {
+  if (t.status !== "Resolved") return false;
+  if (!t.resolvedAt) return false;
+
+  const resolvedDate = t.resolvedAt.toDate();
+  resolvedDate.setHours(0, 0, 0, 0);
+
+  return resolvedDate.getTime() === today.getTime();
+}).length;
     // Overdue Calculation (Based on SLA settings)
     const overdueCount = activeTickets.filter(t => {
        const created = new Date(t.date);

@@ -124,66 +124,61 @@ export default function Schedule({
   ];
 
   const visibleTasks = useMemo(() => {
-     // ADMIN sees:
-  // 1. Tasks created by them
-  // 2. Tasks assigned by them (to manager or technician)
+    // ADMIN sees:
+    // 1. Tasks created by them
+    // 2. Tasks assigned by them (to manager or technician)
     if (currentUser.role === "ADMIN") {
-    return tasks.filter(
-      (t) =>
-        t.createdById === currentUser.id ||
-        t.assignedToId === currentUser.id
-    );
-  }
-  // MANAGER sees:
-  // 1. Tasks created by them
-  // 2. Tasks assigned by them (to technicians)
-  if (currentUser.role === "MANAGER") {
-    return tasks.filter(
-      (t) =>
-        t.createdById === currentUser.id ||
-        t.assignedToId === currentUser.id
-    );
-  }
+      return tasks.filter(
+        (t) =>
+          t.createdById === currentUser.id || t.assignedToId === currentUser.id
+      );
+    }
+    // MANAGER sees:
+    // 1. Tasks created by them
+    // 2. Tasks assigned by them (to technicians)
+    if (currentUser.role === "MANAGER") {
+      return tasks.filter(
+        (t) =>
+          t.createdById === currentUser.id || t.assignedToId === currentUser.id
+      );
+    }
     // TECHNICIAN sees only assigned tasks
     return tasks.filter((t) => t.assignedToId === currentUser.id);
   }, [tasks, currentUser]);
 
+  const currentMonthTasks = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-const currentMonthTasks = useMemo(() => {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+    return visibleTasks.filter((task) => {
+      const taskDate = new Date(task.date);
+      return (
+        taskDate.getMonth() === currentMonth &&
+        taskDate.getFullYear() === currentYear
+      );
+    });
+  }, [visibleTasks]);
+  const monthlyTaskStats = useMemo(() => {
+    const total = currentMonthTasks.length;
+    const completed = currentMonthTasks.filter(
+      (t) => t.status === "completed"
+    ).length;
 
-  return visibleTasks.filter((task) => {
-    const taskDate = new Date(task.date);
-    return (
-      taskDate.getMonth() === currentMonth &&
-      taskDate.getFullYear() === currentYear
-    );
-  });
-}, [visibleTasks]);
-const monthlyTaskStats = useMemo(() => {
-  const total = currentMonthTasks.length;
-  const completed = currentMonthTasks.filter(
-    (t) => t.status === "completed"
-  ).length;
+    const pending = total - completed;
 
-  const pending = total - completed;
+    const efficiency = total === 0 ? 0 : Math.round((completed / total) * 100);
 
-  const efficiency =
-    total === 0 ? 0 : Math.round((completed / total) * 100);
+    const score = completed * 10;
 
-  const score = completed * 10;
-
-  return {
-    total,
-    completed,
-    pending,
-    efficiency,
-    score,
-  };
-}, [currentMonthTasks]);
-
+    return {
+      total,
+      completed,
+      pending,
+      efficiency,
+      score,
+    };
+  }, [currentMonthTasks]);
 
   // Merge Tickets and Tasks into CalendarEvents
   const events = useMemo(() => {
