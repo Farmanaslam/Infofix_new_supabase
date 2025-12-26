@@ -1,27 +1,26 @@
+export type View =
+  | "dashboard"
+  | "tickets"
+  | "review_reports"
+  | "customers"
+  | "schedule"
+  | "reports"
+  | "settings"
+  | "supports"
+  | "brand_ivoomi"
+  | "brand_elista"
+  | "laptop_dashboard"
+  | "laptop_data"
+  | "task_dashboard"
+  | "task_my_works"
+  | "task_schedule"
+  | "task_reports"
+  | "task_ratings"
+  | "customer_dashboard"
+  | "customer_supports"
+  | "customer_profile";
 
-export type View = 
-  | 'dashboard' 
-  | 'tickets' 
-  | 'review_reports' 
-  | 'customers' 
-  | 'schedule' 
-  | 'reports' 
-  | 'settings' 
-  | 'supports' 
-  | 'brand_ivoomi' 
-  | 'brand_elista'
-  | 'laptop_dashboard'
-  | 'laptop_data'
-  | 'task_dashboard'
-  | 'task_my_works'
-  | 'task_schedule'
-  | 'task_reports'
-  | 'task_ratings'
-  | 'customer_dashboard' 
-  | 'customer_supports' 
-  | 'customer_profile';
-
-export type Role = 'ADMIN' | 'MANAGER' | 'TECHNICIAN' | 'CUSTOMER';
+export type Role = "ADMIN" | "MANAGER" | "TECHNICIAN" | "CUSTOMER";
 
 export interface User {
   id: string;
@@ -43,7 +42,8 @@ export interface Customer {
   address: string;
   city?: string;
   pincode?: string;
-  notes?: string;
+  notes?: any[];
+  photo_url: string | null;
 }
 
 export interface TicketHistory {
@@ -55,11 +55,60 @@ export interface TicketHistory {
   action: string; // e.g., "Status Change", "Note Added"
   details: string; // e.g., "Changed from New to In Progress"
 }
+// Old Supabase structure
+export interface SupabaseCustomer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city?: string;
+  pincode?: string;
+  notes?: string[];
+  created_at?: string;
+  photo_url?: string | null;
+}
+export interface SupabaseTicket {
+  id: string;
+  customer_id: string;
+
+  subject: string;
+  status: string;
+
+  hold_reason: string | null;
+  priority: string;
+  assigned_to: string | null;
+
+  created_at: string;
+  resolved_at: string | null;
+
+  device: {
+    type: string;                    // ✅ always required
+    brand?: string | null;           // ✅ optional
+    brandService?: string | null;    // ✅ optional
+    model?: string | null;           // ✅ optional
+    serialNumber?: string | null;    // ✅ optional
+    description?: string | null;     // ✅ optional
+  };
+
+  charger_status: string;
+  store: string;
+
+  amount_estimate: number;
+  warranty: string;
+
+  bill_number: string | null;
+  scheduled_date: string | null;
+  internal_progress_reason?: string | null;
+    internal_progress_note?: string | null;
+}
+
+
 
 export interface Ticket {
   id: string;
   ticketId: string; // Display ID (e.g., TKT-IF-001)
-    firestoreId?: string;       // ✅ ADD THIS
+  firestoreId?: string; // ✅ ADD THIS
 
   customerId: string;
   name: string; // Customer Name (denormalized for display)
@@ -67,7 +116,7 @@ export interface Ticket {
   email: string;
   address: string;
   date: string;
-  
+
   // Device Details
   deviceType: string;
   brand?: string;
@@ -82,12 +131,12 @@ export interface Ticket {
   priority: string;
   issueDescription: string;
   estimatedAmount?: number;
-  
+
   // Workflow / Progress
   holdReason?: string;
   progressReason?: string;
   progressNote?: string; // Internal note for the progress status (Hidden from customer)
-  
+
   // Warranty
   warranty: boolean;
   billNumber?: string;
@@ -108,9 +157,9 @@ export interface Task {
   date: string; // YYYY-MM-DD
   time?: string; // HH:MM
   assignedToId?: string;
-  type: 'general' | 'meeting' | 'maintenance';
-  status: 'pending' | 'completed';
-  priority?: 'normal' | 'urgent'; // Added priority
+  type: "general" | "meeting" | "maintenance";
+  status: "pending" | "completed";
+  priority?: "normal" | "urgent"; // Added priority
   createdById: string;
 }
 
@@ -127,14 +176,14 @@ export interface ChecklistCategory {
 }
 
 export interface ChecklistState {
-  [key: string]: 'pass' | 'fail' | null;
+  [key: string]: "pass" | "fail" | null;
 }
 
 export interface BatteryStats {
   chargePercent: string;
   remainingPercent: string;
   duration: string;
-  health: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Replace';
+  health: "Excellent" | "Good" | "Fair" | "Poor" | "Replace";
 }
 
 export interface ReportHistory {
@@ -158,21 +207,50 @@ export interface Report {
   battery: BatteryStats;
   actionRequired: string | null;
   notes: string;
-  status: 'Draft' | 'Completed';
+  status: "Draft" | "Completed";
   progress: number;
   history?: ReportHistory[];
 }
 
 // Settings Types
-export interface Store { id: string; name: string; }
-export interface DeviceType { id: string; name: string; }
-export interface TicketStatus { id: string; name: string; isSystem?: boolean; }
-export interface Priority { id: string; name: string; }
-export interface HoldReason { id: string; name: string; }
-export interface ProgressReason { id: string; name: string; }
-export interface SLAConfig { high: number; medium: number; low: number; }
-export interface Brand { id: string; name: string; }
-export interface Dealer { id: string; name: string; }
+export interface Store {
+  id: string;
+  name: string;
+}
+export interface DeviceType {
+  id: string;
+  name: string;
+}
+export interface TicketStatus {
+  id: string;
+  name: string;
+  isSystem?: boolean;
+}
+export interface Priority {
+  id: string;
+  name: string;
+}
+export interface HoldReason {
+  id: string;
+  name: string;
+}
+export interface ProgressReason {
+  id: string;
+  name: string;
+}
+export interface SLAConfig {
+  high: number;
+  medium: number;
+  low: number;
+}
+export interface Brand {
+  id: string;
+  name: string;
+}
+export interface Dealer {
+  id: string;
+  name: string;
+}
 
 // AI Support Types
 export interface SupportGuideline {

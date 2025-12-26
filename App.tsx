@@ -32,6 +32,7 @@ import { AlertTriangle, ExternalLink, WifiOff } from "lucide-react";
 import { db, isFirebaseConfigured } from "./firebaseConfig";
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -39,7 +40,12 @@ import {
   query,
   setDoc,
 } from "firebase/firestore";
-
+import { importCustomersToFirestore } from "./migration/importCustomers";
+import { deleteUser } from "firebase/auth";
+import {
+  importTicketsToFirestore,
+  supabaseTickets,
+} from "./migration/importTickets";
 // --- TYPES ---
 type SyncStatus = "connected" | "local" | "error";
 
@@ -313,7 +319,8 @@ const DEFAULT_CUSTOMERS: Customer[] = [
     email: "john@example.com",
     mobile: "555-0123",
     address: "123 Main St, Springfield",
-    notes: "VIP Customer",
+    notes: ["VIP Customer"],
+    photo_url: null,
   },
 ];
 
@@ -365,6 +372,62 @@ function App() {
   // --- PERSISTENT STATE ---
   //const [appSettings, setAppSettings] = useSmartSync<AppSettings>('settings', DEFAULT_SETTINGS, handleSyncStatus);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  {
+    /* 
+    useEffect(() => {
+      // Call the import function once on app load
+      const importData = async () => {
+        try {
+          await importCustomersToFirestore();
+        } catch (error) {
+          console.error("Error importing customers:", error);
+        }
+      };
+
+      importData();
+    }, []);
+*/
+  }
+  {
+    /* useEffect(() => {
+    async function deleteTodaysCustomers() {
+      try {
+        const customersRef = collection(db, "customers");
+
+        // Get today's date in UTC
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const q = query(customersRef); // get all customers
+        const snap = await getDocs(q);
+
+        let deletedCount = 0;
+
+        snap.forEach(async (doc) => {
+          const data: any = doc.data();
+          const createdAt = data.createdAt?.toDate?.(); // Firestore timestamp
+          if (!createdAt) return;
+
+          const createdDate = new Date(createdAt);
+          createdDate.setHours(0, 0, 0, 0);
+
+          if (createdDate.getTime() === today.getTime()) {
+            await deleteDoc(doc.ref);
+            deletedCount++;
+          }
+        });
+        console.log(`✅ Deleted ${deletedCount} customers created today.`);
+      } catch (err) {
+        console.error("❌ Error deleting today's customers:", err);
+      }
+    }
+
+    // Run once
+    deleteTodaysCustomers();
+  }, []);*/
+  }
+
   useEffect(() => {
     if (!isFirebaseConfigured || !db) return;
 
@@ -397,30 +460,30 @@ function App() {
     handleSyncStatus
   );
   const fetchCustomers = async () => {
-  const snapshot = await getDocs(collection(db, "customers"));
+    const snapshot = await getDocs(collection(db, "customers"));
 
-  console.log("🔥 TOTAL DOCS:", snapshot.size); // IMPORTANT
+    console.log("🔥 TOTAL DOCS:", snapshot.size); // IMPORTANT
 
-  const data: Customer[] = snapshot.docs.map(doc => {
-    const d = doc.data();
-    return {
-      id: doc.id,
-      name: d.name ?? "",
-      email: d.email ?? "",
-      mobile: d.mobile ?? "",
-      address: d.address ?? "",
-    };
-  });
+    const data: Customer[] = snapshot.docs.map((doc) => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        name: d.name ?? "",
+        email: d.email ?? "",
+        mobile: d.mobile ?? "",
+        address: d.address ?? "",
+        photo_url: d.photo_url ?? null,
+      };
+    });
 
-  console.log(" MAPPED CUSTOMERS:", data.length);
+    console.log(" MAPPED CUSTOMERS:", data.length);
 
-  setCustomers(data);
-}
-useEffect(() => {
-  fetchCustomers();
-}, []);
+    setCustomers(data);
+  };
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
-  
   const [tickets, setTickets] = useSmartSync<Ticket[]>(
     "tickets",
     [],
