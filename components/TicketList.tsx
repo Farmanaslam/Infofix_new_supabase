@@ -27,6 +27,7 @@ import {
 } from "firebase/firestore";
 import { useEffect } from "react";
 import { db } from "@/firebaseConfig";
+import { supabase } from "@/lib/supabaseClient";
 
 {
   /*interface TicketListProps {
@@ -103,9 +104,7 @@ const TicketList: React.FC<TicketListProps> = ({
 
   // --- FILTERING LOGIC ---
   //let displayTickets = tickets.filter((t) => t.status !== "Pending Approval"); // pending tickets are for Review Reports
-  let displayTickets = tickets.filter(
-    (t) => t.status && t.status !== "Pending Approval"
-  );
+  let displayTickets = tickets.filter((t) => t.status !== "Pending Approval");
 
   // If TECHNICIAN, only show assigned tickets
   if (currentUser.role === "TECHNICIAN") {
@@ -117,40 +116,59 @@ const TicketList: React.FC<TicketListProps> = ({
   useEffect(() => {
     if (!currentUser) return;
 
-    const ticketsRef = collection(db,  "tickets");
+    const fetchTickets = async () => {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    let q;
+      if (error) {
+        console.error("Error fetching tickets:", error);
+        return;
+      }
 
-    if (currentUser.role === "TECHNICIAN") {
-      q = query(
-        ticketsRef,
-        where("assignedToId", "==", currentUser.id),
-        orderBy("createdAt", "desc")
-      );
-    } else {
-      q = query(ticketsRef, orderBy("createdAt", "desc"));
-    }
+      // Map snake_case to camelCase for React usage
+      const mappedData =
+        data?.map((t: any) => ({
+          id: t.id,
+          ticketId: t.ticket_id ?? t.id,
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ticketsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Ticket[];
+          // ⚠️ tickets table does NOT have customer info
+          name: t.customer_name ?? "—",
+          number: t.customer_number ?? "—",
+          email: t.customer_email ?? "—",
 
-      setTickets(ticketsData);
-    });
+          status: t.status ?? "New",
+          priority: t.priority,
+          store: t.store,
+          deviceType: t.device_type,
+          brand: t.brand,
+          model: t.model,
+          warranty: t.warranty,
+          issueDescription: t.issue_description,
+          assignedToId: t.assigned_to_id,
+          createdAt: t.created_at,
+          date: t.created_at, // or format as needed// or format as you want
+        })) || [];
 
-    return () => unsubscribe();
+      // If TECHNICIAN, filter assigned tickets
+      const finalData =
+        currentUser.role === "TECHNICIAN"
+          ? mappedData.filter((t) => t.assignedToId === currentUser.id)
+          : mappedData;
+      setTickets(finalData);
+    };
+
+    fetchTickets();
   }, [currentUser]);
 
   const filteredTickets = displayTickets.filter(
     (ticket) =>
-      ticket.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.number.includes(searchTerm) ||
-      ticket.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.ticketId.toLowerCase().includes(searchTerm.toLowerCase())
+      (ticket.name ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (ticket.number ?? "").includes(searchTerm) ||
+      (ticket.email ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (ticket.ticketId ?? "").toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const APP_ID = "main";
 
   const handleEdit = (ticket: Ticket) => {
     setEditingTicket(ticket);
@@ -176,7 +194,7 @@ const TicketList: React.FC<TicketListProps> = ({
     if (!ticketToDelete) return;
 
     try {
-      await deleteDoc(doc(db, "tickets", ticketToDelete));
+      await supabase.from("tickets").delete().eq("id", ticketToDelete);
       setTicketToDelete(null);
     } catch (error) {
       console.error("Delete failed", error);
@@ -288,7 +306,7 @@ const TicketList: React.FC<TicketListProps> = ({
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                          {ticket.ticketId}
+                          {ticket.deviceType}
                           {ticket.priority === "High" && (
                             <span
                               className="w-2 h-2 rounded-full bg-red-500"
@@ -297,7 +315,7 @@ const TicketList: React.FC<TicketListProps> = ({
                           )}
                         </h3>
                         <p className="text-xs text-slate-400 font-medium">
-                          {ticket.name}
+                          ID: {ticket.ticketId}
                         </p>
                       </div>
                     </div>

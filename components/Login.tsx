@@ -23,6 +23,8 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/firebaseConfig";
+import { supabase } from "@/lib/supabaseClient";
+
 interface LoginProps {
   onLogin: (user: User) => void;
   teamMembers: User[];
@@ -145,38 +147,72 @@ export default function Login({
     }, 800); // Fake delay for UX feel
   };
 
+  const TEMP_ADMIN = {
+    email: "admin@infofix.com",
+    password: "Admin@123",
+    name: "Super Admin",
+    role: "ADMIN" as Role,
+  };
+
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
     try {
-      // 1️⃣ Firebase Auth login
-      const userCred = await signInWithEmailAndPassword(
-        auth,
-        staffEmail,
-        staffPass
-      );
+      // ================================
+      // 1️⃣ TEMPORARY ADMIN LOGIN
+      // ================================
+      if (
+        staffEmail === TEMP_ADMIN.email &&
+        staffPass === TEMP_ADMIN.password
+      ) {
+        if (staffRemember) {
+          localStorage.setItem(
+            "nexus_staff_login",
+            JSON.stringify({ email: staffEmail })
+          );
+        } else {
+          localStorage.removeItem("nexus_staff_login");
+        }
 
-      // 2️⃣ Fetch staff profile
-      const snap = await getDoc(doc(db, "users", userCred.user.uid));
+        onLogin({
+          id: "TEMP_ADMIN",
+          name: TEMP_ADMIN.name,
+          email: TEMP_ADMIN.email,
+          role: TEMP_ADMIN.role,
+        });
 
-      if (!snap.exists()) {
+        return; // ⛔ EXIT FUNCTION HERE
+      }
+
+      // ================================
+      // 2️⃣ REAL STAFF LOGIN (SUPABASE)
+      // ================================
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: staffEmail,
+          password: staffPass,
+        });
+
+      if (authError || !authData.user) {
+        throw new Error("Invalid email or password");
+      }
+
+      const { data: staff, error: staffError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", authData.user.id)
+        .single();
+
+      if (staffError || !staff) {
         throw new Error("Staff profile not found");
       }
 
-      const data = snap.data();
-
-      // 3️⃣ Role validation
-      if (
-        data.role !== "TECHNICIAN" &&
-        data.role !== "MANAGER" &&
-        data.role !== "ADMIN"
-      ) {
+      if (!["ADMIN", "MANAGER", "TECHNICIAN"].includes(staff.role)) {
         throw new Error("Not authorized as staff");
       }
 
-      // 4️⃣ Remember Me
       if (staffRemember) {
         localStorage.setItem(
           "nexus_staff_login",
@@ -186,169 +222,136 @@ export default function Login({
         localStorage.removeItem("nexus_staff_login");
       }
 
-      // 5️⃣ Login success
       onLogin({
-        id: userCred.user.uid,
-        name: data.name,
-        email: data.email,
-        role: data.role,
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
       });
     } catch (err: any) {
-      setError("Invalid email or password");
+      setError(err.message || "Staff login failed");
     } finally {
       setIsLoading(false);
     }
   };
+  const makePasswordFromPhone = (phone: string) => {
+    return phone.replace(/\D/g, "") + "@inf0fix";
+  };
 
   const handleCustomerLogin = async (e: React.FormEvent) => {
-    if (custRemember) {
-      localStorage.setItem(
-        "nexus_cust_login",
-        JSON.stringify({ email: custEmail, phone: custPhone })
-      );
-    } else {
-      localStorage.removeItem("nexus_cust_login");
-    }
-
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
 
-    const existingCustomer = customers.find(
-      (c) => c.email.toLowerCase() === custEmail.toLowerCase()
-    );
+    try {
+      const email = custEmail.trim().toLowerCase();
+      const phone = custPhone.replace(/\D/g, "");
+      const password = makePasswordFromPhone(phone); // phone@inf0fix
 
-    if (isSignUp) {
-      if (existingCustomer) {
-        setError("Account with this email already exists. Please login.");
-        return;
-      }
-      if (!custName || !custPhone || !custAddress) {
-        setError("All fields are required for registration.");
-        return;
-      }
+      if (!email || !phone)
+        throw new Error("Email and phone number are required.");
 
-      try {
-        setIsLoading(true);
-        setError(null);
+      // -------------------------
+      // SIGN-UP FLOW
+      // -------------------------
+      if (isSignUp) {
+        if (!custName || !custAddress) {
+          throw new Error("Name and address are required for registration.");
+        }
 
-        // 1️⃣ Create user in Firebase Auth
-        const userCred = await createUserWithEmailAndPassword(
-          auth,
-          custEmail,
-          custPhone // using phone as password (for now)
-        );
+        // Check if email already exists
+        const { data: existingUser } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("email", email)
+          .maybeSingle();
 
-        // 2️⃣ Save customer profile in Firestore
-        await setDoc(doc(db, "customers", userCred.user.uid), {
+        if (existingUser) {
+          throw new Error("Email already registered. Please login instead.");
+        }
+
+        // Create Supabase Auth user
+        const { data: signUpData, error: signUpError } =
+          await supabase.auth.signUp({
+            email,
+            password,
+          });
+
+        if (signUpError || !signUpData.user) {
+          throw new Error(signUpError?.message || "Signup failed.");
+        }
+
+        const userId = signUpData.user.id;
+
+        // Insert profile
+        const { error: insertError } = await supabase.from("customers").insert({
+          id: userId,
           name: custName,
-          email: custEmail,
-          mobile: custPhone,
+          email,
+          mobile: phone,
           address: custAddress,
           role: "CUSTOMER",
-          createdAt: serverTimestamp(),
         });
 
-        // 3️⃣ Login user in app
+        if (insertError)
+          throw new Error(
+            insertError.message || "Failed to save customer profile."
+          );
+
+        // Auto login after signup
         onLogin({
-          id: userCred.user.uid,
+          id: userId,
           name: custName,
-          email: custEmail,
+          email,
           role: "CUSTOMER",
         });
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
       }
 
-      {
-        /*const newCustomer: Customer = {
-            id: `CUST-${String(customers.length + 1).padStart(3, '0')}`,
-            name: custName,
-            email: custEmail,
-            mobile: custPhone,
-            address: custAddress
-        };
-        
-        setCustomers([...customers, newCustomer]);
-        
-        const userObj: User = {
-            id: newCustomer.id,
-            name: newCustomer.name,
-            email: newCustomer.email,
-            role: 'CUSTOMER',
-        };
-*/
+      // -------------------------
+      // LOGIN FLOW
+      // -------------------------
+      else {
+        const { data: authData, error: authError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+        if (authError || !authData.user)
+          throw new Error("Invalid email or phone.");
+
+        // Fetch customer profile
+        const { data: customer, error: custError } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("id", authData.user.id)
+          .single();
+
+        if (custError || !customer)
+          throw new Error("Customer profile not found.");
+
+        // Successful login
+        onLogin({
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          role: "CUSTOMER",
+        });
       }
-      if (rememberMe) {
+
+      // Remember login
+      if (custRemember) {
         localStorage.setItem(
           "nexus_cust_login",
-          JSON.stringify({ email: custEmail, phone: custPhone })
+          JSON.stringify({ email, phone })
         );
-      }
-
-      //simulateLoading(() => onLogin(userObj));
-    } else {
-      {
-        /* if (existingCustomer) {
-        if (existingCustomer.mobile === custPhone) {
-          const userObj: User = {
-            id: existingCustomer.id,
-            name: existingCustomer.name,
-            email: existingCustomer.email,
-            role: "CUSTOMER",
-          };
-
-          if (rememberMe) {
-            localStorage.setItem(
-              "nexus_cust_login",
-              JSON.stringify({ email: custEmail, phone: custPhone })
-            );
-          } else {
-            localStorage.removeItem("nexus_cust_login");
-          }
-
-          simulateLoading(() => onLogin(userObj));
-        } else {
-          setError(
-            "Invalid credentials. Password is your registered phone number."
-          );
-        }
       } else {
-        setError("Customer not found. Please sign up.");
-      }*/
+        localStorage.removeItem("nexus_cust_login");
       }
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // 1️⃣ Firebase Auth login
-        const userCred = await signInWithEmailAndPassword(
-          auth,
-          custEmail,
-          custPhone
-        );
-
-        // 2️⃣ Fetch customer profile from Firestore
-        const snap = await getDoc(doc(db, "customers", userCred.user.uid));
-
-        if (!snap.exists()) {
-          throw new Error("Customer profile not found");
-        }
-
-        const data = snap.data();
-
-        onLogin({
-          id: userCred.user.uid,
-          name: data.name,
-          email: data.email,
-          role: "CUSTOMER",
-        });
-      } catch (err: any) {
-        setError("Invalid email or password");
-      } finally {
-        setIsLoading(false);
-      }
+    } catch (err: any) {
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setIsLoading(false);
     }
   };
 

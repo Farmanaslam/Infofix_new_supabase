@@ -44,6 +44,7 @@ import {
 import { getDocs, query, where, limit } from "firebase/firestore";
 
 import { db } from "@/firebaseConfig";
+import { supabase } from "@/lib/supabaseClient";
 // Helper to generate IDs
 {
   /*const generateId = (prefix: string, list: any[]) => {
@@ -90,6 +91,7 @@ export const TicketFormModal: React.FC<TicketFormModalProps> = ({
   // UI State
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assignableUsers, setAssignableUsers] = useState<AppUser[]>([]);
 
   // Form State
   const initialFormState = {
@@ -213,6 +215,39 @@ export const TicketFormModal: React.FC<TicketFormModalProps> = ({
     }
   }, [formData.holdReason]);
 
+  useEffect(() => {
+    const loadAssignableUsers = async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, role");
+
+      if (error) {
+        console.error("Error loading users:", error);
+        return;
+      }
+
+      let filteredUsers = data || [];
+
+      // 🔐 ROLE-BASED FILTERING
+      if (currentUser.role === "MANAGER") {
+        filteredUsers = filteredUsers.filter(
+          (u) => u.role === "MANAGER" || u.role === "TECHNICIAN"
+        );
+      }
+
+      // ADMIN sees everyone → no filter
+
+      setAssignableUsers(filteredUsers);
+    };
+
+    if (
+      isOpen &&
+      (currentUser.role === "ADMIN" || currentUser.role === "MANAGER")
+    ) {
+      loadAssignableUsers();
+    }
+  }, [isOpen, currentUser.role]);
+
   // --- HISTORY LOGIC ---
   const createHistoryEntry = (
     action: string,
@@ -251,125 +286,85 @@ export const TicketFormModal: React.FC<TicketFormModalProps> = ({
 
     try {
       // ---------- CUSTOMER LOGIC ----------
-      const customerQuery = query(
-        collection(db, "customers"),
-        where("mobile", "==", formData.mobile),
-        limit(1)
-      );
+      e.preventDefault();
+      setIsSubmitting(true);
 
-      const customerSnap = await getDocs(customerQuery);
+      const { data, error } = await supabase.from("tickets").insert([
+        {
+          hold_reason: formData.holdReason,
+          progress_reason: formData.progressReason,
+          progress_note: formData.progressNote,
+          device_type: formData.deviceType,
+          charger_included: formData.chargerIncluded,
+          brand: formData.brand,
+          model: formData.model,
+          serial: formData.serial,
+          device_description: formData.deviceDescription,
+          issue_description: formData.issueDescription,
+          priority: formData.priority,
+          estimated_amount: formData.estimatedAmount || null,
+          warranty: formData.warranty,
+          bill_number: formData.billNumber || null,
+        },
+      ]);
 
-      const existingMatch = !customerSnap.empty
-        ? { id: customerSnap.docs[0].id, ...customerSnap.docs[0].data() }
-        : null;
-
-      let customerId = existingMatch?.id;
-
-      if (!existingMatch) {
-        const customerRef = await addDoc(collection(db, "customers"), {
-          name: formData.name,
-          email: formData.email,
-          mobile: formData.mobile,
-          address: formData.address,
-          createdAt: serverTimestamp(),
-          createdBy: currentUser.id,
-        });
-
-        customerId = customerRef.id;
-      } else if (editingTicket) {
-        customerId = editingTicket.customerId;
+      if (error) {
+        console.error(error);
+        alert("Error creating ticket!");
+      } else {
+        alert("Ticket created successfully!");
+        onClose(); // close modal if any
       }
+
+      setIsSubmitting(false);
 
       // ---------- TICKET UPDATE ----------
       if (editingTicket) {
-        const newHistoryLogs: TicketHistory[] = [];
-
-        if (editingTicket.status !== formData.status) {
-          let statusDetail = `Changed from '${editingTicket.status}' to '${formData.status}'`;
-          if (formData.status === "Rejected") {
-            statusDetail += `\nReason: ${rejectionNote}`;
-          }
-          newHistoryLogs.push(
-            createHistoryEntry("Status Updated", statusDetail)
-          );
-        }
-
-        await updateDoc(doc(db, "tickets", editingTicket.id), {
-          name: formData.name,
-          number: formData.mobile,
-          email: formData.email,
-          address: formData.address,
-
-          deviceType: formData.deviceType,
-          brand: formData.brand,
-          model: formData.model,
-          serial: formData.serial,
-          chargerIncluded: formData.chargerIncluded === "Yes",
-          deviceDescription: formData.deviceDescription,
-
-          issueDescription: formData.issueDescription,
-          store: formData.store,
-          estimatedAmount: formData.estimatedAmount
-            ? Number(formData.estimatedAmount)
-            : null,
-          warranty: formData.warranty === "Yes",
-          billNumber: formData.billNumber,
-          priority: formData.priority,
-
-          status: formData.status,
-          holdReason: formData.holdReason,
-          progressReason: formData.progressReason,
-          progressNote: formData.progressNote,
-
-          scheduledDate: formData.scheduledDate,
-          assignedToId: formData.assignedToId || null,
-
-          history: [...(editingTicket.history || []), ...newHistoryLogs],
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      // ---------- TICKET CREATE ----------
-      else {
-        await addDoc(collection(db,"tickets"), {
-          customerId,
-
-          name: formData.name,
-          number: formData.mobile,
-          email: formData.email,
-          address: formData.address,
-
-          deviceType: formData.deviceType,
-          brand: formData.brand,
-          model: formData.model,
-          serial: formData.serial,
-          chargerIncluded: formData.chargerIncluded === "Yes",
-          deviceDescription: formData.deviceDescription,
-
-          issueDescription: formData.issueDescription,
-          store: formData.store,
-          estimatedAmount: formData.estimatedAmount
-            ? Number(formData.estimatedAmount)
-            : null,
-          warranty: formData.warranty === "Yes",
-          billNumber: formData.billNumber,
-          priority: formData.priority,
-
-          status: "New",
-          holdReason: "",
-          progressReason: "",
-          progressNote: "",
-
-          scheduledDate: formData.scheduledDate,
-          assignedToId: formData.assignedToId || null,
-
-          history: [
-            createHistoryEntry("Ticket Created", "Initial ticket creation."),
-          ],
-
-          createdAt: serverTimestamp(),
-          createdBy: currentUser.id,
-        });
+        // Update ticket
+        const { data: updatedTicket, error: updateError } = await supabase
+          .from("tickets")
+          .update({
+            customer_id: formData.customerId,
+            hold_reason: formData.holdReason,
+            progress_reason: formData.progressReason,
+            progress_note: formData.progressNote,
+            device_type: formData.deviceType,
+            charger_included: formData.chargerIncluded,
+            brand: formData.brand,
+            model: formData.model,
+            serial: formData.serial,
+            device_description: formData.deviceDescription,
+            issue_description: formData.issueDescription,
+            priority: formData.priority,
+            estimated_amount: formData.estimatedAmount || null,
+            warranty: formData.warranty,
+            bill_number: formData.billNumber || null,
+            updated_at: new Date(),
+          })
+          .eq("id", editingTicket.id);
+      } else {
+        // Insert ticket
+        const { data: ticketData, error: ticketError } = await supabase
+          .from("tickets")
+          .insert([
+            {
+              customer_id: formData.customerId,
+              hold_reason: formData.holdReason,
+              progress_reason: formData.progressReason,
+              progress_note: formData.progressNote,
+              device_type: formData.deviceType,
+              charger_included: formData.chargerIncluded,
+              brand: formData.brand,
+              model: formData.model,
+              serial: formData.serial,
+              device_description: formData.deviceDescription,
+              issue_description: formData.issueDescription,
+              priority: formData.priority,
+              estimated_amount: formData.estimatedAmount || null,
+              warranty: formData.warranty,
+              bill_number: formData.billNumber || null,
+            },
+          ]);
         console.log("Ticket created successfully");
       }
 
@@ -837,7 +832,7 @@ export const TicketFormModal: React.FC<TicketFormModalProps> = ({
                                 className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 appearance-none"
                               >
                                 <option value="">Unassigned</option>
-                                {settings?.teamMembers?.map((m) => (
+                                {assignableUsers?.map((m) => (
                                   <option key={m.id} value={m.id}>
                                     {m.name}
                                   </option>

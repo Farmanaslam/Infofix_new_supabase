@@ -35,6 +35,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/firebaseConfig";
 import { createUserWithEmailAndPassword } from "firebase/auth";
+import { supabase } from "@/lib/supabaseClient";
 
 interface SettingsProps {
   currentUser: User;
@@ -478,15 +479,19 @@ export default function Settings({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   React.useEffect(() => {
     const fetchUsers = async () => {
-      const snapshot = await getDocs(collection(db, "users"));
-      const users = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as User[];
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Failed to fetch users", error);
+        return;
+      }
 
       onUpdateSettings({
         ...settings,
-        teamMembers: users,
+        teamMembers: data as User[],
       });
     };
 
@@ -543,80 +548,96 @@ export default function Settings({
 
   // Team Handlers
   const handleSaveMember = async (member: User) => {
-    {
-      /*let newMembers;
-    if (member.id) {
-      newMembers = settings.teamMembers.map(m => m.id === member.id ? member : m);
-    } else {
-      newMembers = [...settings.teamMembers, { ...member, id: Date.now().toString() }];
+    try {
+      // =========================
+      // UPDATE EXISTING USER
+      // =========================
+      if (member.id) {
+        const { error } = await supabase
+          .from("users")
+          .update({
+            name: member.name,
+            role: member.role,
+            experience: member.experience || "",
+            photo: member.photo || "",
+          })
+          .eq("id", member.id);
+
+        if (error) throw error;
+
+        onUpdateSettings({
+          ...settings,
+          teamMembers: settings.teamMembers.map((m) =>
+            m.id === member.id ? member : m
+          ),
+        });
+      }
+
+      // =========================
+      // CREATE NEW USER
+      // =========================
+      else {
+        if (!member.password) {
+          throw new Error("Password is required");
+        }
+
+        // 1️⃣ Create auth user (FRONTEND SAFE)
+        const { data: authData, error: authError } = await supabase.auth.signUp(
+          {
+            email: member.email,
+            password: member.password,
+          }
+        );
+
+        if (authError || !authData.user) throw authError;
+
+        const userId = authData.user.id;
+
+        // 2️⃣ Insert profile
+        const { error: dbError } = await supabase.from("users").insert({
+          id: userId,
+          name: member.name,
+          email: member.email,
+          role: member.role,
+          experience: member.experience || "",
+          photo: member.photo || "",
+          created_at: new Date().toISOString(),
+        });
+
+        if (dbError) throw dbError;
+
+        onUpdateSettings({
+          ...settings,
+          teamMembers: [...settings.teamMembers, { ...member, id: userId }],
+        });
+      }
+
+      setIsTeamModalOpen(false);
+      setEditingMember(undefined);
+    } catch (err: any) {
+      alert(err.message || "Failed to save member");
     }
-    onUpdateSettings({ ...settings, teamMembers: newMembers });
-    setIsTeamModalOpen(false);
-    setEditingMember(undefined);*/
-    }
-    if (member.id) {
-      // 🔁 UPDATE USER
-      await updateDoc(doc(db, "users", member.id), {
-        name: member.name || "",
-        email: member.email || "",
-        role: member.role,
-        experience: member.experience || "",
-        photo: member.photo || "",
-      });
-
-      onUpdateSettings({
-        ...settings,
-        teamMembers: settings.teamMembers.map((m) =>
-          m.id === member.id ? member : m
-        ),
-      });
-    } else {
-      // ➕ ADD USER
-      const cred = await createUserWithEmailAndPassword(
-        auth,
-        member.email,
-        member.password!
-      );
-
-      const uid = cred.user.uid;
-      await setDoc(doc(db, "users", uid), {
-        id: uid,
-        name: member.name,
-        email: member.email,
-        role: member.role,
-        mobile: member.mobile || "",
-        experience: member.experience || "",
-        photo: member.photo || "",
-        address: member.address || "",
-        createdAt: serverTimestamp(),
-      });
-
-      onUpdateSettings({
-        ...settings,
-        teamMembers: [...settings.teamMembers, { ...member, id: uid }],
-      });
-    }
-
-    setIsTeamModalOpen(false);
-    setEditingMember(undefined);
   };
 
   const handleDeleteMember = async (id: string) => {
-    {
-      /*} onUpdateSettings({ 
-      ...settings, 
-      teamMembers: settings.teamMembers.filter(m => m.id !== id) 
-    });
-    setConfirmDeleteId(null);*/
+    try {
+      // delete profile
+      const { error } = await supabase.from("users").delete().eq("id", id);
+
+      if (error) throw error;
+
+      // delete auth user
+      await supabase.auth.admin.deleteUser(id);
+
+      onUpdateSettings({
+        ...settings,
+        teamMembers: settings.teamMembers.filter((m) => m.id !== id),
+      });
+
+      setConfirmDeleteId(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to delete member");
     }
-    await deleteDoc(doc(db, "users", id));
-
-    onUpdateSettings({
-      ...settings,
-      teamMembers: settings.teamMembers.filter((m) => m.id !== id),
-    });
-
-    setConfirmDeleteId(null);
   };
 
   const handleSlaUpdate = (key: keyof SLAConfig, value: number) => {
