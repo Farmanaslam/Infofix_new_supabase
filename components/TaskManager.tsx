@@ -30,8 +30,6 @@ import {
   CartesianGrid,
 } from "recharts";
 import TasksView from "./TasksView";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/firebaseConfig";
 
 interface TaskManagerProps {
   activeTab: "dashboard" | "my_works" | "reports" | "ratings";

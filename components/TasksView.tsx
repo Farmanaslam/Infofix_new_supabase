@@ -65,12 +65,11 @@ export default function TasksView({
   // 2. Filter TASKS based on accessible members
   const accessibleTasks = useMemo(() => {
     if (currentUser.role === "TECHNICIAN") {
-      // Technician: only assigned tasks
       return tasks.filter((t) => t.assignedToId === currentUser.id);
     }
 
     if (currentUser.role === "MANAGER") {
-      // Manager: own created + assigned
+      // Manager: own created + assigned tasks
       return tasks.filter(
         (t) =>
           t.createdById === currentUser.id || t.assignedToId === currentUser.id
@@ -78,10 +77,7 @@ export default function TasksView({
     }
 
     // ADMIN
-    return tasks.filter(
-      (t) =>
-        t.createdById === currentUser.id || t.assignedToId === currentUser.id
-    );
+    return tasks; // Admin sees everything
   }, [tasks, currentUser]);
 
   // 3. Filter REPORTS based on accessible members (matching by name usually)
@@ -96,14 +92,14 @@ export default function TasksView({
 
   // 4. Apply UI Filters (Status & Specific Member Selection)
   const filteredTasks = useMemo(() => {
-    let result = accessibleTasks;
+    let result: Task[] = accessibleTasks;
 
-    // Filter by specific member if selected
     if (memberFilter !== "all") {
-      result = result.filter((t) => t.assignedToId === memberFilter);
+      // Show all tasks assigned to that member
+      result = tasks.filter((t) => t.assignedToId === memberFilter);
     }
 
-    // Filter by Status
+    // Status filter
     if (statusFilter === "active")
       result = result.filter((t) => t.status === "pending");
     if (statusFilter === "completed")
@@ -113,7 +109,7 @@ export default function TasksView({
         (t) => t.priority === "urgent" && t.status === "pending"
       );
 
-    // Sort by Date (Newest First) + Priority
+    // Sort
     return result.sort((a, b) => {
       if (
         a.priority === "urgent" &&
@@ -129,7 +125,7 @@ export default function TasksView({
         return 1;
       return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
-  }, [accessibleTasks, statusFilter, memberFilter]);
+  }, [tasks, accessibleTasks, statusFilter, memberFilter]);
 
   // KPI Calculations
   const kpiData = useMemo(() => {
@@ -151,38 +147,72 @@ export default function TasksView({
       total > 0 ? Math.round((completed / total) * 100) : 0;
 
     // Reports KPI
-    const baseReports =
-      memberFilter === "all"
-        ? accessibleReports
-        : accessibleReports.filter((r) => {
-            const member = teamMembers.find((m) => m.id === memberFilter);
-            return member ? r.deviceInfo.technicianName === member.name : false;
-          });
+    // ---- MONTHLY TASK COMPLETION KPI (FIXED TARGETS) ----
+    // ---- MONTHLY TASK COMPLETION KPI (FIXED TARGETS) ----
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-    const currentMonth = new Date().getMonth();
-    const reportsThisMonth = baseReports.filter(
-      (r) => new Date(r.date).getMonth() === currentMonth
+    // Determine monthly target
+    let monthlyTarget: number;
+    if (currentUser.role === "TECHNICIAN") {
+      monthlyTarget = 20;
+    } else if (memberFilter === "all") {
+      monthlyTarget = 180; // whole team
+    } else {
+      monthlyTarget = 20; // single member selected
+    }
+
+    // Filter tasks for KPI
+    let tasksForKPI: Task[];
+
+    // Technician: only own tasks
+    if (currentUser.role === "TECHNICIAN") {
+      tasksForKPI = accessibleTasks.filter(
+        (t) =>
+          t.assignedToId === currentUser.id &&
+          new Date(t.date).getMonth() === currentMonth &&
+          new Date(t.date).getFullYear() === currentYear
+      );
+    } else {
+      // Admin/Manager
+      if (memberFilter === "all") {
+        tasksForKPI = accessibleTasks.filter(
+          (t) =>
+            new Date(t.date).getMonth() === currentMonth &&
+            new Date(t.date).getFullYear() === currentYear
+        );
+      } else {
+        // Selected technician → all tasks assigned to them this month
+        tasksForKPI = tasks.filter(
+          (t) =>
+            t.assignedToId === memberFilter &&
+            new Date(t.date).getMonth() === currentMonth &&
+            new Date(t.date).getFullYear() === currentYear
+        );
+      }
+    }
+
+    // Completed tasks
+    const completedThisMonth = tasksForKPI.filter(
+      (t) => t.status === "completed"
     ).length;
-    const monthlyTarget =
-      20 *
-      (memberFilter === "all" && currentUser.role !== "TECHNICIAN"
-        ? accessibleMembers.length
-        : 1); // Scale target if viewing team
+
+    // Progress %
     const targetProgress = Math.min(
-      Math.round((reportsThisMonth / monthlyTarget) * 100),
+      Math.round((completedThisMonth / monthlyTarget) * 100),
       100
     );
-   
 
     return {
       active: total - completed,
       completed,
       urgentPending,
       completionRate,
-      reportsThisMonth,
       targetProgress,
-      totalHistory: baseReports.length,
+      reportsThisMonth: completedThisMonth,
       monthlyTargetDisplay: monthlyTarget,
+      totalHistory: accessibleTasks.length,
     };
   }, [
     accessibleTasks,
@@ -410,7 +440,6 @@ export default function TasksView({
           )}
         </div>
       </div>
-      
 
       {/* 2. KPI GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

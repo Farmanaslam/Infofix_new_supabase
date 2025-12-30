@@ -46,6 +46,7 @@ import {
   importTicketsToFirestore,
   supabaseTickets,
 } from "./migration/importTickets";
+import { supabase } from "./lib/supabaseClient";
 // --- TYPES ---
 type SyncStatus = "connected" | "local" | "error";
 
@@ -427,31 +428,25 @@ function App() {
     deleteTodaysCustomers();
   }, []);*/
   }
-
   useEffect(() => {
-    if (!isFirebaseConfigured || !db) return;
+    const loadUsers = async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, role");
 
-    // Fetch users collection
-    const usersCollection = collection(db, "users");
-
-    const unsubscribe = onSnapshot(
-      usersCollection,
-      (snapshot) => {
-        const users: User[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<User, "id">),
+      if (!error && data) {
+        setAppSettings((prev) => ({
+          ...prev,
+          teamMembers: data.map((u: any) => ({
+            id: u.id,
+            name: u.name,
+            role: u.role,
+          })),
         }));
-
-        console.log("Fetched users from Firestore:", users); // <-- Debug
-
-        setAppSettings((prev) => ({ ...prev, teamMembers: users }));
-      },
-      (error) => {
-        console.error("Error fetching users:", error);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    loadUsers();
   }, []);
 
   const [customers, setCustomers] = useSmartSync<Customer[]>(
@@ -491,7 +486,9 @@ function App() {
   );
   //const [tickets, setTickets] = useState<Ticket[]>([]);
 
-  const [tasks, setTasks] = useSmartSync<Task[]>("tasks", [], handleSyncStatus);
+  //const [tasks, setTasks] = useSmartSync<Task[]>("tasks", [], handleSyncStatus);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
   const [laptopReports, setLaptopReports] = useSmartSync<Report[]>(
     "laptop_reports",
     [],
@@ -527,6 +524,33 @@ function App() {
     );
 
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const loadTasks = async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setTasks(
+          data.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            date: t.date,
+            time: t.time,
+            type: t.type,
+            status: t.status,
+            assignedToId: t.assigned_to_id,
+            createdById: t.created_by_id,
+          }))
+        );
+      }
+    };
+
+    loadTasks();
   }, []);
 
   // --- HANDLERS ---

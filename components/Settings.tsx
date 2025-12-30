@@ -23,18 +23,7 @@ import {
   Laptop,
 } from "lucide-react";
 import { User, Ticket, Role, SLAConfig, AppSettings } from "../types";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
-import { auth, db } from "@/firebaseConfig";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+
 import { supabase } from "@/lib/supabaseClient";
 
 interface SettingsProps {

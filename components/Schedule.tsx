@@ -21,6 +21,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Ticket, Task, AppSettings, User as AppUser } from "../types";
+import { supabase } from "@/lib/supabaseClient";
 
 interface ScheduleProps {
   tasks: Task[];
@@ -244,31 +245,81 @@ export default function Schedule({
     setTaskToDelete(taskId);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (taskToDelete) {
+      await supabase.from("tasks").delete().eq("id", taskToDelete);
       setTasks(tasks.filter((t) => t.id !== taskToDelete));
       setTaskToDelete(null);
     }
   };
 
-  const handleToggleTaskStatus = (taskId: string) => {
-    setTasks(
-      tasks.map((t) =>
-        t.id === taskId
-          ? { ...t, status: t.status === "completed" ? "pending" : "completed" }
-          : t
-      )
+  const handleToggleTaskStatus = async (taskId: string) => {
+    const updated = tasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            status: (t.status === "completed" ? "pending" : "completed") as
+              | "pending"
+              | "completed",
+          }
+        : t
     );
+
+    const changed = updated.find((t) => t.id === taskId);
+
+    if (changed) {
+      await supabase
+        .from("tasks")
+        .update({ status: changed.status })
+        .eq("id", changed.id);
+    }
+
+    setTasks(updated);
   };
 
-  const handleSaveTask = (task: Task) => {
+  const handleSaveTask = async (task: Task) => {
     if (editingTask) {
-      // Update existing
+      await supabase
+        .from("tasks")
+        .update({
+          title: task.title,
+          description: task.description,
+          date: task.date,
+          time: task.time,
+          type: task.type,
+          status: task.status,
+          assigned_to_id: task.assignedToId,
+        })
+        .eq("id", task.id);
+
       setTasks(tasks.map((t) => (t.id === task.id ? task : t)));
     } else {
-      // Create new
-      setTasks([...tasks, task]);
+      const { data } = await supabase
+        .from("tasks")
+        .insert({
+          title: task.title,
+          description: task.description,
+          date: task.date,
+          time: task.time,
+          type: task.type,
+          status: task.status,
+          assigned_to_id: task.assignedToId,
+          created_by_id: task.createdById,
+        })
+        .select()
+        .single();
+
+      if (data) {
+        setTasks([
+          ...tasks,
+          {
+            ...task,
+            id: data.id,
+          },
+        ]);
+      }
     }
+
     setIsTaskModalOpen(false);
     setEditingTask(null);
   };
@@ -311,25 +362,25 @@ export default function Schedule({
           key={day}
           onClick={() => setSelectedDateStr(dateStr)}
           className={`
-            h-24 sm:h-32 border border-slate-100 p-2 relative cursor-pointer transition-all group
-            ${
-              isSelected
-                ? "bg-indigo-50/50 ring-2 ring-inset ring-indigo-500/20 z-10"
-                : "hover:bg-slate-50"
-            }
-            ${isToday ? "bg-white" : "bg-white"}
-          `}
+              h-24 sm:h-32 border border-slate-100 p-2 relative cursor-pointer transition-all group
+              ${
+                isSelected
+                  ? "bg-indigo-50/50 ring-2 ring-inset ring-indigo-500/20 z-10"
+                  : "hover:bg-slate-50"
+              }
+              ${isToday ? "bg-white" : "bg-white"}
+            `}
         >
           <div className="flex justify-between items-start mb-1">
             <span
               className={`
-                w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold
-                ${
-                  isToday
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "text-slate-700 group-hover:bg-slate-200"
-                }
-             `}
+                  w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold
+                  ${
+                    isToday
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "text-slate-700 group-hover:bg-slate-200"
+                  }
+              `}
             >
               {day}
             </span>
@@ -345,13 +396,13 @@ export default function Schedule({
               <div
                 key={idx}
                 className={`
-                      text-[10px] px-1.5 py-0.5 rounded truncate font-medium border-l-2
-                      ${
-                        evt.type === "ticket"
-                          ? "bg-indigo-50 text-indigo-700 border-indigo-400"
-                          : "bg-emerald-50 text-emerald-700 border-emerald-400"
-                      }
-                   `}
+                        text-[10px] px-1.5 py-0.5 rounded truncate font-medium border-l-2
+                        ${
+                          evt.type === "ticket"
+                            ? "bg-indigo-50 text-indigo-700 border-indigo-400"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-400"
+                        }
+                    `}
                 title={evt.title}
               >
                 {evt.time && (
@@ -654,20 +705,20 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
   {
     /*useEffect(() => {
-    if (taskToEdit) {
-      setFormData(taskToEdit);
-    } else {
-      setFormData({
-        title: "",
-        date: initialDate,
-        time: "09:00",
-        description: "",
-        type: "general",
-        assignedToId: currentUser.role !== "TECHNICIAN" ? "" : currentUser.id,
-        status: "pending",
-      });
-    }
-  }, [taskToEdit, initialDate, currentUser]);*/
+      if (taskToEdit) {
+        setFormData(taskToEdit);
+      } else {
+        setFormData({
+          title: "",
+          date: initialDate,
+          time: "09:00",
+          description: "",
+          type: "general",
+          assignedToId: currentUser.role !== "TECHNICIAN" ? "" : currentUser.id,
+          status: "pending",
+        });
+      }
+    }, [taskToEdit, initialDate, currentUser]);*/
   }
   useEffect(() => {
     if (taskToEdit) {
@@ -714,7 +765,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
     e.preventDefault();
     if (formData.title && formData.date) {
       onSave({
-        id: taskToEdit ? taskToEdit.id : Date.now().toString(),
+        id: taskToEdit ? taskToEdit.id : crypto.randomUUID(),
         title: formData.title!,
         date: formData.date!,
         time: formData.time,
