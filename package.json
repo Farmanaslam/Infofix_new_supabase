@@ -12,6 +12,7 @@
     "@google/genai": "^1.30.0",
     "@supabase/supabase-js": "^2.89.0",
     "canvas-confetti": "^1.9.2",
+    "dotenv": "^17.2.3",
     "firebase": "^12.7.0",
     "firebase-admin": "^13.6.0",
     "html2canvas": "^1.4.1",
