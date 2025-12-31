@@ -25,6 +25,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
+import { supabase } from "@/lib/supabaseClient";
 {
   /*interface CustomerListProps {
   customers: Customer[];
@@ -47,7 +48,14 @@ const CustomerFormModal: React.FC<{
   onClose: () => void;
   editingCustomer?: Customer | null;
   existingCustomers: Customer[];
-}> = ({ isOpen, onClose, editingCustomer, existingCustomers }) => {
+  reloadCustomers: () => void;
+}> = ({
+  isOpen,
+  onClose,
+  editingCustomer,
+  existingCustomers,
+  reloadCustomers,
+}) => {
   const [formData, setFormData] = useState<Partial<Customer>>({
     name: "",
     email: "",
@@ -93,27 +101,41 @@ const CustomerFormModal: React.FC<{
     }
 
     if (editingCustomer) {
-      await updateDoc(doc(db, "customers", editingCustomer.id), {
-        name: formData.name,
-        email: formData.email || "",
-        mobile: formData.mobile,
-        address: formData.address || "",
-        notes: formData.notes || "",
-        updatedAt: serverTimestamp(),
-      });
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          name: formData.name,
+          email: formData.email || "",
+          mobile: formData.mobile,
+          address: formData.address || "",
+          notes: formData.notes || [],
+        })
+        .eq("id", editingCustomer.id);
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
     } else {
-      await addDoc(collection(db, "customers"), {
-        name: formData.name,
-        email: formData.email || "",
-        mobile: formData.mobile,
-        address: formData.address || "",
-        notes: formData.notes || "",
-        role: "customer",
-        createdAt: serverTimestamp(),
-      });
+      const { error } = await supabase.from("customers").insert([
+        {
+          name: formData.name,
+          email: formData.email || "",
+          mobile: formData.mobile,
+          address: formData.address || "",
+          notes: formData.notes || [],
+          role: "CUSTOMER",
+        },
+      ]);
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
     }
 
     onClose();
+    await reloadCustomers();
   };
 
   if (!isOpen) return null;
@@ -300,23 +322,42 @@ const CustomerList: React.FC = () => {
   }
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this customer?")) {
-      //setCustomers(customers.filter((c) => c.id !== id));
-      await deleteDoc(doc(db, "customers", id));
+    if (!window.confirm("Are you sure you want to delete this customer?"))
+      return;
+
+    const { error } = await supabase.from("customers").delete().eq("id", id);
+
+    if (error) {
+      console.error("Delete error:", error.message);
+    } else {
+      // update UI instantly
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+    }
+  };
+
+  const reloadCustomers = async () => {
+    const { data, error } = await supabase.from("customers").select("*");
+    if (!error && data) {
+      setCustomers(
+        data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          email: item.email || "",
+          mobile: item.mobile || item.phone || "",
+          address: item.address || "",
+          notes: item.notes || [],
+          role: item.role,
+          createdAt: item.created_at,
+          photo_url: item.photo_url || "",
+          legacyId: item.legacy_id || "",
+        }))
+      );
     }
   };
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, "customers"), (snap) => {
-      const list = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Customer[];
-
-      setCustomers(list);
-    });
-
-    return () => unsub();
+    reloadCustomers();
   }, []);
+
   return (
     <div className="relative h-full flex flex-col">
       {/* Header Actions */}
@@ -546,10 +587,10 @@ const CustomerList: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         editingCustomer={editingCustomer}
         existingCustomers={customers}
+        reloadCustomers={reloadCustomers}
       />
     </div>
   );
 };
 
 export default CustomerList;
-  

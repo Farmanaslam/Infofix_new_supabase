@@ -66,7 +66,7 @@ export interface SupabaseCustomer {
   pincode?: string;
   notes?: string[];
   created_at?: string;
-  photo_url?: string | null;
+ photoUrl: string | null;
 }
 export interface SupabaseTicket {
   id: string;

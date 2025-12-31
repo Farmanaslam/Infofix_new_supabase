@@ -26,7 +26,6 @@ import {
   doc,
 } from "firebase/firestore";
 import { useEffect } from "react";
-import { db } from "@/firebaseConfig";
 import { supabase } from "@/lib/supabaseClient";
 
 {
