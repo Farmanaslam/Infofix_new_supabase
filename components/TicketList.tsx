@@ -111,58 +111,67 @@ const TicketList: React.FC<TicketListProps> = ({
       (t) => t.assignedToId === currentUser.id
     );
   }
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "";
+
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = String(date.getFullYear()).slice(-2);
+
+    return `${day}/${month}/${year} `;
+  };
+  const fetchTickets = async () => {
+    const { data, error } = await supabase
+      .from("tickets")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching tickets:", error);
+      return;
+    }
+
+    // Map snake_case to camelCase for React usage
+    const mappedData =
+      data?.map((t: any) => ({
+        id: t.id,
+        ticketId: t.ticket_id ?? t.id,
+
+        // ⚠️ tickets table does NOT have customer info
+        name: t.customer_name ?? "—",
+        number: t.customer_number ?? "—",
+        email: t.customer_email ?? "—",
+
+        status: t.status ?? "New",
+        priority: t.priority,
+        store: t.store,
+        deviceType: t.device_type,
+        brand: t.brand,
+        model: t.model,
+        warranty: t.warranty,
+        assignedToId: t.assigned_to,
+        subject: t.subject, // ✅ FIX          assignedToId: t.assigned_to_id,
+        createdAt: t.created_at,
+        date: formatDate(t.created_at), // or format as needed// or format as you want
+      })) || [];
+
+    // If TECHNICIAN, filter assigned tickets
+    const finalData =
+      currentUser.role === "TECHNICIAN"
+        ? mappedData.filter((t) => t.assignedToId === currentUser.id)
+        : mappedData;
+    setTickets(finalData);
+  };
 
   useEffect(() => {
     if (!currentUser) return;
-
-    const fetchTickets = async () => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching tickets:", error);
-        return;
-      }
-
-      // Map snake_case to camelCase for React usage
-      const mappedData =
-        data?.map((t: any) => ({
-          id: t.id,
-          ticketId: t.ticket_id ?? t.id,
-
-          // ⚠️ tickets table does NOT have customer info
-          name: t.customer_name ?? "—",
-          number: t.customer_number ?? "—",
-          email: t.customer_email ?? "—",
-
-          status: t.status ?? "New",
-          priority: t.priority,
-          store: t.store,
-          deviceType: t.device_type,
-          brand: t.brand,
-          model: t.model,
-          warranty: t.warranty,
-          issueDescription: t.issue_description,
-          assignedToId: t.assigned_to_id,
-          createdAt: t.created_at,
-          date: t.created_at, // or format as needed// or format as you want
-        })) || [];
-
-      // If TECHNICIAN, filter assigned tickets
-      const finalData =
-        currentUser.role === "TECHNICIAN"
-          ? mappedData.filter((t) => t.assignedToId === currentUser.id)
-          : mappedData;
-      setTickets(finalData);
-    };
-
     fetchTickets();
   }, [currentUser]);
 
   const filteredTickets = displayTickets.filter(
     (ticket) =>
+      (ticket.subject ?? "").toLowerCase().includes(searchTerm.toLowerCase()) || // ✅ FIX
       (ticket.name ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (ticket.number ?? "").includes(searchTerm) ||
       (ticket.email ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -181,23 +190,21 @@ const TicketList: React.FC<TicketListProps> = ({
     }
   };
 
-  {
-    /*const confirmDelete = () => {
-    if (ticketToDelete) {
-      setTickets(tickets.filter((t) => t.id !== ticketToDelete));
-      setTicketToDelete(null);
-    }
-  };*/
-  }
   const confirmDelete = async () => {
     if (!ticketToDelete) return;
 
-    try {
-      await supabase.from("tickets").delete().eq("id", ticketToDelete);
-      setTicketToDelete(null);
-    } catch (error) {
+    const { error } = await supabase
+      .from("tickets")
+      .delete()
+      .eq("id", ticketToDelete);
+
+    if (error) {
       console.error("Delete failed", error);
+      return;
     }
+
+    setTicketToDelete(null);
+    await fetchTickets();
   };
 
   const handleOpenNew = () => {
@@ -205,8 +212,11 @@ const TicketList: React.FC<TicketListProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleTicketCreated = () => {
+  const handleTicketCreated = async () => {
     setSearchTerm(""); // Clear search so the new ticket is visible
+    setIsModalOpen(false);
+    setEditingTicket(null);
+    await fetchTickets(); // ✅ REFRESH
   };
 
   const canDelete = currentUser.role === "ADMIN";
@@ -340,7 +350,7 @@ const TicketList: React.FC<TicketListProps> = ({
 
                   <div className="space-y-2 text-sm text-slate-600 mb-4">
                     <p className="line-clamp-2 text-slate-800 font-medium italic">
-                      "{ticket.issueDescription}"
+                      "{ticket.subject}"
                     </p>
 
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 mt-2">

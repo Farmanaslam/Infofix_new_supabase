@@ -60,7 +60,7 @@ export default function TaskManager({
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       const matchesSearch = t.title
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerm.toLowerCase());
       const matchesStatus = filterStatus === "all" || t.status === filterStatus;
       return matchesSearch && matchesStatus;

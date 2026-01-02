@@ -34,16 +34,6 @@ import {
   TicketHistory,
 } from "../types";
 import { jsPDF } from "jspdf";
-import {
-  addDoc,
-  updateDoc,
-  collection,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { getDocs, query, where, limit } from "firebase/firestore";
-
-import { db } from "@/firebaseConfig";
 import { supabase } from "@/lib/supabaseClient";
 // Helper to generate IDs
 {
@@ -281,94 +271,63 @@ export const TicketFormModal: React.FC<TicketFormModalProps> = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      // ---------- CUSTOMER LOGIC ----------
-      e.preventDefault();
-      setIsSubmitting(true);
+      const payload = {
+        customer_id: existingCustomer?.id || null,
+        subject: formData.issueDescription,
+        status: formData.status,
+        hold_reason: formData.holdReason || null,
+        priority: formData.priority,
+        assigned_to:
+          assignableUsers.find((u) => u.id === formData.assignedToId)?.name ||
+          null,
 
-      const { data, error } = await supabase.from("tickets").insert([
-        {
-          hold_reason: formData.holdReason,
-          progress_reason: formData.progressReason,
-          progress_note: formData.progressNote,
-          device_type: formData.deviceType,
-          charger_included: formData.chargerIncluded,
-          brand: formData.brand,
-          model: formData.model,
-          serial: formData.serial,
-          device_description: formData.deviceDescription,
-          issue_description: formData.issueDescription,
-          priority: formData.priority,
-          estimated_amount: formData.estimatedAmount || null,
-          warranty: formData.warranty,
-          bill_number: formData.billNumber || null,
-        },
-      ]);
+        device_type: formData.deviceType,
+        device_brand: formData.brand || null,
+        device_model: formData.model || null,
+        device_serial_number: formData.serial || null,
+        charger_status: formData.chargerIncluded || null,
 
-      if (error) {
-        console.error(error);
-        alert("Error creating ticket!");
-      } else {
-        alert("Ticket created successfully!");
-        onClose(); // close modal if any
-      }
+        store: formData.store,
+        amount_estimate: formData.estimatedAmount || 0,
+        warranty: formData.warranty,
+        bill_number: formData.billNumber || null,
+        scheduled_date: formData.scheduledDate || null,
 
-      setIsSubmitting(false);
+        internal_progress_reason: formData.progressReason || null,
+        internal_progress_note: formData.progressNote || null,
+        device_brand_service:
+          formData.deviceType === "Brand Service" ? formData.brand : null,
+        device_description: formData.deviceDescription || null,
+      };
 
-      // ---------- TICKET UPDATE ----------
+      // ---------------- EDIT TICKET ----------------
       if (editingTicket) {
-        // Update ticket
-        const { data: updatedTicket, error: updateError } = await supabase
+        const { error } = await supabase
           .from("tickets")
-          .update({
-            customer_id: formData.customerId,
-            hold_reason: formData.holdReason,
-            progress_reason: formData.progressReason,
-            progress_note: formData.progressNote,
-            device_type: formData.deviceType,
-            charger_included: formData.chargerIncluded,
-            brand: formData.brand,
-            model: formData.model,
-            serial: formData.serial,
-            device_description: formData.deviceDescription,
-            issue_description: formData.issueDescription,
-            priority: formData.priority,
-            estimated_amount: formData.estimatedAmount || null,
-            warranty: formData.warranty,
-            bill_number: formData.billNumber || null,
-            updated_at: new Date(),
-          })
+          .update(payload)
           .eq("id", editingTicket.id);
-      } else {
-        // Insert ticket
-        const { data: ticketData, error: ticketError } = await supabase
-          .from("tickets")
-          .insert([
-            {
-              customer_id: formData.customerId,
-              hold_reason: formData.holdReason,
-              progress_reason: formData.progressReason,
-              progress_note: formData.progressNote,
-              device_type: formData.deviceType,
-              charger_included: formData.chargerIncluded,
-              brand: formData.brand,
-              model: formData.model,
-              serial: formData.serial,
-              device_description: formData.deviceDescription,
-              issue_description: formData.issueDescription,
-              priority: formData.priority,
-              estimated_amount: formData.estimatedAmount || null,
-              warranty: formData.warranty,
-              bill_number: formData.billNumber || null,
-            },
-          ]);
-        console.log("Ticket created successfully");
+        alert("Ticket Edited Successfully");
+        if (error) throw error;
       }
 
-      // ---------- SUCCESS ----------
+      // ---------------- CREATE TICKET ----------------
+      else {
+        const { error } = await supabase.from("tickets").insert([
+          {
+            ...payload,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+        alert("Ticket Created Successfully");
+
+        if (error) throw error;
+      }
+
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
