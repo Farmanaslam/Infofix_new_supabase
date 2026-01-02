@@ -404,20 +404,23 @@ const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm"
             />
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              value={formData.password || ""}
-              onChange={(e) =>
-                setFormData({ ...formData, password: e.target.value })
-              }
-              placeholder="Temporary password"
-              className="w-full px-3 py-2 border rounded-lg"
-            />
-          </div>
+          {/* Password – ONLY when creating user */}
+          {!member && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
+                Password
+              </label>
+              <input
+                type="password"
+                value={formData.password || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm"
+                required
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
@@ -841,7 +844,7 @@ export default function Settings({
                         <h3 className="font-bold text-slate-800 text-lg">
                           {member.name}
                         </h3>
-                        <p className="text-sm text-slate-500 mb-4">
+                        <p className="text-sm text-slate-500 mb-4 line-clamp-2 break-all">
                           {member.email}
                         </p>
                         <div className="flex items-center gap-2 text-xs text-slate-400 mb-5 bg-slate-50 p-2 rounded-lg">
